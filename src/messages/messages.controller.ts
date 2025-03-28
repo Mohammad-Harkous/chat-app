@@ -1,9 +1,9 @@
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Param } from '@nestjs/common';
 import { MessagesService } from './messages.service';
 import { AuthGuard } from '@nestjs/passport';
 import { GetUser } from 'src/common/decorators/get-user.decorator';
 import { SendMessageDto } from './dto/send-message.dto';
-import { ApiTags, ApiBearerAuth, ApiBody, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiBody, ApiResponse, ApiParam } from '@nestjs/swagger';
 
 @ApiTags('Messages')
 @ApiBearerAuth()
@@ -69,5 +69,58 @@ export class MessagesController {
       conversation: cleanConversation,
       createdAt: message.createdAt,
     };
+  }
+
+  /**
+   * Retrieves all messages in a specific conversation.
+   *
+   * @param user - The authenticated user's details extracted from the JWT token.
+   * @param conversationId - The ID of the conversation to fetch messages from.
+   * @returns An array of messages in the conversation, sorted by creation date.
+   * @throws {NotFoundException} If the conversation is not found.
+   * @throws {ForbiddenException} If the user is not a participant in the conversation.
+   */
+  @Get(':conversationId')
+  @ApiParam({ name: 'conversationId', required: true, description: 'The ID of the conversation' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns all messages in a conversation, sorted by time',
+    schema: {
+      example: [
+        {
+          id: 'message-uuid',
+          content: 'Hey there!',
+          isRead: false,
+          sender: {
+            id: 'user-id',
+            username: 'john_doe',
+            isOnline: false,
+            lastSeen: null,
+          },
+          createdAt: '2025-03-27T20:49:42.964Z',
+        },
+      ],
+    },
+  })
+  @UseGuards(AuthGuard('jwt'))
+  async getMessages(
+    @GetUser() user: { userId: string },
+    @Param('conversationId') conversationId: string,
+  ) {
+    const messages = await this.messagesService.getMessagesForConversation(conversationId, user.userId);
+
+    // Sanitize sender data
+    return messages.map((msg) => ({
+      id: msg.id,
+      content: msg.content,
+      isRead: msg.isRead,
+      createdAt: msg.createdAt,
+      sender: {
+        id: msg.sender.id,
+        username: msg.sender.username,
+        isOnline: msg.sender.isOnline,
+        lastSeen: msg.sender.lastSeen,
+      },
+    }));
   }
 }

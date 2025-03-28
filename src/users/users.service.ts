@@ -57,5 +57,27 @@ export class UsersService {
     async findById(id: string): Promise<User | null> {
         return this.userRepository.findOne({ where: { id } });
     }
+
+
+  /**
+   * Searches for users by their username or email.
+   * 
+   * @param query The search query (case-insensitive).
+   * @param currentUserId The ID of the current user (to exclude them from the search results).
+   * @returns A list of users matching the search query.
+   */
+  async searchUsers(query: string, currentUserId: string): Promise<User[]> {
+      // Create a query builder to construct the database query
+      return this.userRepository
+      // Specify the alias for the 'user' table in the query
+      .createQueryBuilder('user')
+      // Define the search condition: match the query string against the username or email
+      // The ILIKE operator performs a case-insensitive for partial match, and the % wildcard matches any characters before and after the query string
+      .where('user.username ILIKE :query OR user.email ILIKE :query', { query: `%${query}%` })
+      // Exclude the current user from the search results
+      .andWhere('user.id != :currentUserId', { currentUserId })
+      // Execute the query and retrieve multiple results
+      .getMany();
+  }
   
 }

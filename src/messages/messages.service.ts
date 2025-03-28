@@ -57,4 +57,22 @@ export class MessagesService {
 
     return savedMessage;
   }
+
+  async getMessagesForConversation(conversationId: string, userId: string): Promise<Message[]> {
+    // 1. Verify the conversation exists
+    const conversation = await this.conversationsService.findById(conversationId);
+    if (!conversation) throw new NotFoundException('Conversation not found.');
+  
+    // 2. Check if the user is a participant
+    const isParticipant =
+      conversation.participant1.id === userId || conversation.participant2.id === userId;
+    if (!isParticipant) throw new ForbiddenException('You are not a participant in this conversation.');
+  
+    // 3. Fetch messages sorted by creation date (ASC = oldest to newest)
+    return this.messageRepository.find({
+      where: { conversation: { id: conversationId } },
+      order: { createdAt: 'ASC' },
+      relations: ['sender'], // Ensure sender is loaded
+    });
+  }
 }

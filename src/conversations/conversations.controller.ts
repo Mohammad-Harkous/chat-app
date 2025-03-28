@@ -9,8 +9,10 @@ import {
   import { AuthGuard } from '@nestjs/passport';
   import { GetUser } from 'src/common/decorators/get-user.decorator';
   import { StartConversationDto } from './dto/start-conversation.dto';
-  import { ApiBody, ApiResponse } from '@nestjs/swagger';
+  import { ApiBearerAuth, ApiBody, ApiResponse, ApiTags } from '@nestjs/swagger';
   
+  @ApiTags('Conversations') // Groups endpoints in Swagger UI
+  @ApiBearerAuth() // Indicates that the endpoints require authentication
   @Controller('conversations')
   export class ConversationsController {
     constructor(private readonly conversationsService: ConversationsService) {}

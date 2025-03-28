@@ -6,6 +6,7 @@ import { AuthService } from './auth.service';
 import { ApiTags, ApiBearerAuth, ApiBody, ApiResponse } from '@nestjs/swagger';
 
 @ApiTags('Auth') // Groups endpoints in Swagger UI
+@ApiBearerAuth() // Indicates that the endpoints require authentication and  Required for Swagger to send the JWT
 @Controller('auth')
 export class AuthController {
   constructor(
