@@ -27,6 +27,8 @@ import { JwtStrategy } from './jwt.strategy';
     }),
   ],
   providers: [AuthService, JwtStrategy],
-  controllers: [AuthController]
+  controllers: [AuthController],
+  // 👇 Export JwtModule so other modules (like ChatGateway) can use JwtService
+  exports: [JwtModule],
 })
 export class AuthModule {}
