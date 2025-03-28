@@ -60,4 +60,24 @@ export class ConversationsService {
       },
     });
   }
+
+  /**
+   * Finds a conversation by its ID.
+   * 
+   * @param id The ID to search for.
+   * @returns The conversation if found, otherwise `null`.
+   */
+  async findById(id: string): Promise<Conversation | null> {
+    return this.conversationRepository.findOne({ where: { id } });
+  }
+  
+  /**
+   * Updates a conversation in the database.
+   * 
+   * @param convo - The conversation to update.
+   * @returns The updated conversation.
+   */
+  async update(convo: Conversation): Promise<Conversation> {
+    return this.conversationRepository.save(convo);
+  }
 }
