@@ -108,6 +108,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   server: Server;
 
   @SubscribeMessage('typing')
+  /**
+   * Handle a 'typing' event from a client.
+   * @param data - The conversation ID where the user is typing
+   * @param client - The client that sent the message
+   *
+   * This method is called automatically by the Nest framework when a client
+   * sends a 'typing' event to the WebSocket server. It sends a 'userTyping'
+   * event to the other participant in the conversation, if they are online.
+   */
   async handleTyping(
     @MessageBody() data: { conversationId: string },
     @ConnectedSocket() client: Socket,
