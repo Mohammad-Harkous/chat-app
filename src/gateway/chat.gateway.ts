@@ -11,6 +11,7 @@ import { Socket, Server } from 'socket.io';
 import { UseGuards } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConversationsService } from 'src/conversations/conversations.service';
+import { MessagesService } from 'src/messages/messages.service';
 
 @WebSocketGateway({
   cors: {
@@ -23,6 +24,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   constructor(
     private jwtService: JwtService,
     private conversationsService: ConversationsService,
+    private messagesService: MessagesService,
   ) {}
 
 
@@ -77,33 +79,73 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+// ✅ Syncing messages sent via Socket.IO with your database
+// (no need to use the REST POST /messages anymore — everything will go live + persistent!)
   @SubscribeMessage('sendMessage')
   /**
-   * Handle a message from a client.
-   * @param data - The message data containing the recipient's ID and the message text
+   * Handle a 'sendMessage' event from a client.
+   * @param data - The payload from the client, containing the conversation ID and message content
    * @param client - The client that sent the message
    *
    * This method is called automatically by the Nest framework when a client
-   * sends a message to the WebSocket server. It verifies if the recipient is
-   * online and if so, sends a 'newMessage' event to the recipient's socket with
-   * the message text and the sender's ID. If the recipient is offline, it does
-   * not send anything.
+   * sends a 'sendMessage' event to the WebSocket server. It saves the message
+   * to the database using an existing service, finds the recipient from the
+   * conversation, and sends the message to the recipient if they are online.
+   * It also sends a confirmation to the sender.
    */
-  handleMessage(
-    @MessageBody() data: { to: string; message: string },
+  async handleMessage(
+    @MessageBody() data: { conversationId: string; content: string },
     @ConnectedSocket() client: Socket,
   ) {
     const fromUserId = client.data.userId;
-    const recipientSocketId = this.onlineUsers.get(data.to);
 
-    if (recipientSocketId) {
-      client.to(recipientSocketId).emit('newMessage', {
-        from: fromUserId,
-        message: data.message,
+    try {
+      // 1. Save message to DB using existing service
+      const savedMessage = await this.messagesService.sendMessage(
+        data.conversationId,
+        fromUserId,
+        data.content,
+      );
+
+      // 2. Find recipient from conversation
+      const conversation = await this.conversationsService.findById(data.conversationId);
+      if (!conversation) return;
+
+      const recipientId =
+        conversation.participant1.id === fromUserId
+          ? conversation.participant2.id
+          : conversation.participant1.id;
+
+      // 3. Send message to recipient (if online)
+      const recipientSocketId = this.onlineUsers.get(recipientId);
+      if (recipientSocketId) {
+        this.server.to(recipientSocketId).emit('newMessage', {
+          id: savedMessage.id,
+          content: savedMessage.content,
+          conversationId: conversation.id,
+          sender: {
+            id: fromUserId,
+            username: savedMessage.sender.username,
+          },
+          createdAt: savedMessage.createdAt,
+        });
+      }
+
+      // 4. Also emit to sender (to confirm UI)
+      client.emit('newMessage', {
+        id: savedMessage.id,
+        content: savedMessage.content,
+        conversationId: conversation.id,
+        sender: {
+          id: fromUserId,
+          username: savedMessage.sender.username,
+        },
+        createdAt: savedMessage.createdAt,
       });
+    } catch (error) {
+      console.error('[Socket Message Error]', error.message);
     }
   }
-
   @WebSocketServer()
   server: Server;
 
