@@ -5,10 +5,12 @@ import {
   ConnectedSocket,
   OnGatewayConnection,
   OnGatewayDisconnect,
+  WebSocketServer,
 } from '@nestjs/websockets';
 import { Socket, Server } from 'socket.io';
 import { UseGuards } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
+import { ConversationsService } from 'src/conversations/conversations.service';
 
 @WebSocketGateway({
   cors: {
@@ -18,7 +20,11 @@ import { JwtService } from '@nestjs/jwt';
 export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private onlineUsers = new Map<string, string>(); // userId -> socket.id
 
-  constructor(private jwtService: JwtService) {}
+  constructor(
+    private jwtService: JwtService,
+    private conversationsService: ConversationsService,
+  ) {}
+
 
   /**
    * Handle a new client connection.
@@ -37,6 +43,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       this.onlineUsers.set(payload.sub, client.id);
       client.data.userId = payload.sub;
       console.log(`User ${payload.sub} connected`);
+
+      // 🔥 Broadcast to all connected clients that this user is now online
+      this.server.emit('userStatus', {
+        userId: payload.sub,
+        status: 'online',
+      });
     } catch (e) {
       console.log('Invalid token. Disconnecting...');
       client.disconnect();
@@ -56,6 +68,12 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (userId) {
       this.onlineUsers.delete(userId);
       console.log(`User ${userId} disconnected`);
+
+      // 🔥 Broadcast to all connected clients that this user is now offline
+      this.server.emit('userStatus', {
+        userId,
+        status: 'offline',
+      });
     }
   }
 
@@ -85,4 +103,34 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
     }
   }
+
+  @WebSocketServer()
+  server: Server;
+
+  @SubscribeMessage('typing')
+  async handleTyping(
+    @MessageBody() data: { conversationId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const fromUserId = client.data.userId;
+
+    // 1. Get conversation
+    const conversation = await this.conversationsService.findById(data.conversationId);
+    if (!conversation) return;
+
+    // 2. Find the other participant
+    const otherUserId =
+      conversation.participant1.id === fromUserId
+        ? conversation.participant2.id
+        : conversation.participant1.id;
+
+    const recipientSocketId = this.onlineUsers.get(otherUserId);
+    if (recipientSocketId) {
+      this.server.to(recipientSocketId).emit('userTyping', {
+        from: fromUserId,
+        conversationId: data.conversationId,
+      });
+    }
+  }
+
 }
