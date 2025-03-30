@@ -23,6 +23,9 @@ import {
   
     @Column({ type: 'timestamp', nullable: true })
     lastMessageAt: Date;
+
+    @Column({ nullable: true })
+    deletedByUserId: string; // stores the user who deleted it
   
     @CreateDateColumn()
     createdAt: Date;

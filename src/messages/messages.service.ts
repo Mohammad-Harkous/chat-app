@@ -75,4 +75,27 @@ export class MessagesService {
       relations: ['sender'], // Ensure sender is loaded
     });
   }
+
+  /**
+   * Marks all messages in a conversation as read, except for messages sent by the given reader.
+   * @param conversationId The ID of the conversation to mark messages as read in.
+   * @param readerId The ID of the user who is marking the messages as read.
+   */
+  async markMessagesAsRead(conversationId: string, readerId: string): Promise<void> {
+    // Create a query builder to update messages in the message repository
+    await this.messageRepository
+      .createQueryBuilder()
+      // Specify the update operation
+      .update()
+      // Set the 'isRead' property to true for the updated messages
+      .set({ isRead: true })
+      // Filter messages by conversation ID
+      .where('conversationId = :conversationId', { conversationId })
+      // Exclude messages sent by the reader (i.e., only mark received messages)
+      .andWhere('senderId != :readerId', { readerId })
+      // Only update messages that are currently unread
+      .andWhere('isRead = false')
+      // Execute the update query
+      .execute();
+  }
 }

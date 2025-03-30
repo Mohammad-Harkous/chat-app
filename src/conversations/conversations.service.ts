@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Conversation } from './entities/conversation.entity';
-import { Repository } from 'typeorm';
+import { Repository, Not } from 'typeorm';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
@@ -49,12 +49,28 @@ export class ConversationsService {
     return this.conversationRepository.save(conversation);
   }
 
+  /**
+   * Retrieves all conversations for a given user, excluding any that the user has deleted.
+   * The conversations are ordered with the most recent messages first.
+   * @param userId The ID of the user to fetch conversations for.
+   * @returns An array of conversations that the user is a participant in.
+   */
   async getAllConversationsForUser(userId: string): Promise<Conversation[]> {
+    // 1. Define the conditions for finding conversations:
+    //    - The user is either participant1 or participant2.
+    //    - The conversation has not been deleted by the user.
     return this.conversationRepository.find({
       where: [
-        { participant1: { id: userId } },
-        { participant2: { id: userId } },
+        {
+          participant1: { id: userId },
+          deletedByUserId: Not(userId), // Exclude conversations deleted by the user
+        },
+        {
+          participant2: { id: userId },
+          deletedByUserId: Not(userId), // Exclude conversations deleted by the user
+        },
       ],
+      // 2. Order the conversations by the most recent message first
       order: {
         lastMessageAt: 'DESC', // Most recent chats first
       },
@@ -79,5 +95,41 @@ export class ConversationsService {
    */
   async update(convo: Conversation): Promise<Conversation> {
     return this.conversationRepository.save(convo);
+  }
+
+/**
+ * Soft deletes a conversation for a specific user by marking it as deleted.
+ *
+ * This operation does not remove the conversation from the database, but
+ * records which user has deleted the conversation. It ensures that the
+ * user is a participant in the conversation before marking it as deleted.
+ *
+ * @param conversationId - The ID of the conversation to be soft deleted.
+ * @param userId - The ID of the user attempting to delete the conversation.
+ * @returns An object indicating success.
+ * @throws {NotFoundException} If the conversation is not found.
+ * @throws {ForbiddenException} If the user is not a participant in the conversation.
+ */
+
+  async softDeleteForUser(conversationId: string, userId: string): Promise<{ success: boolean }> {
+    const convo = await this.conversationRepository.findOne({
+      where: { id: conversationId },
+    });
+  
+    if (!convo) throw new NotFoundException('Conversation not found');
+  
+    // Make sure user is a participant
+    if (
+      convo.participant1.id !== userId &&
+      convo.participant2.id !== userId
+    ) {
+      throw new ForbiddenException('Not part of this conversation');
+    }
+  
+    // Save who deleted the chat
+    convo.deletedByUserId = userId;
+    await this.conversationRepository.save(convo);
+  
+    return { success: true };
   }
 }

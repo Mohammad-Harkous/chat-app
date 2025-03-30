@@ -4,6 +4,8 @@ import {
     Body,
     UseGuards,
     Get,
+    Delete,
+    Param,
   } from '@nestjs/common';
   import { ConversationsService } from './conversations.service';
   import { AuthGuard } from '@nestjs/passport';
@@ -94,4 +96,24 @@ import {
         };
     });
     }
+
+  @Delete(':id')
+  @UseGuards(AuthGuard('jwt'))
+  @ApiBearerAuth()
+  @ApiResponse({ status: 200, description: 'Chat deleted (soft)' })
+  /**
+   * Deletes a conversation for the authenticated user (soft delete).
+   * 
+   * @param user - The authenticated user, extracted from the JWT token.
+   * @param id - The ID of the conversation to delete.
+   * @returns A result of the soft delete operation for the conversation.
+   */
+  async deleteConversation(
+    @GetUser() user: { userId: string }, // Extracts the authenticated user from the JWT token
+    @Param('id') id: string, // Extracts the conversation ID from the request parameter
+  ) {
+    // Calls the conversationsService to perform the soft delete operation
+    // for the specified conversation ID and authenticated user ID
+    return this.conversationsService.softDeleteForUser(id, user.userId);
+  }
 }

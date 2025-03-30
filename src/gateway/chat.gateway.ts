@@ -184,4 +184,42 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage('markAsRead')
+  /**
+   * Handle a 'markAsRead' event from a client.
+   * @param data - The conversation ID to mark as read
+   * @param client - The client that sent the message
+   *
+   * This method is called automatically by the Nest framework when a client
+   * sends a 'markAsRead' event to the WebSocket server. It marks all messages
+   * in the conversation as read in the database and notifies the other
+   * participant in the conversation if they are online.
+   */
+  async handleMarkAsRead(
+    @MessageBody() data: { conversationId: string },
+    @ConnectedSocket() client: Socket,
+  ) {
+    const readerId = client.data.userId;
+
+    // 1. Mark messages as read in DB
+    await this.messagesService.markMessagesAsRead(data.conversationId, readerId);
+
+    // 2. Get conversation and notify the other participant
+    const conversation = await this.conversationsService.findById(data.conversationId);
+    if (!conversation) return;
+
+    const senderId =
+      conversation.participant1.id === readerId
+        ? conversation.participant2.id
+        : conversation.participant1.id;
+
+    const senderSocketId = this.onlineUsers.get(senderId);
+    if (senderSocketId) {
+      this.server.to(senderSocketId).emit('messageRead', {
+        conversationId: data.conversationId,
+        readBy: readerId,
+      });
+    }
+  }
+
 }
